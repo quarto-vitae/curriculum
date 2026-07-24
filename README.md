@@ -80,6 +80,88 @@ Generic fallbacks for LaTeX, Typst, HTML and markdown mean a style you have not
 implemented still renders (e.g. if a user is swapping templates that define
 custom styles that your template does not).
 
+### Bibliographies
+
+`style: bibliography` declares that a listing's data is *citation data*
+rather than a table of records, rendered by citeproc. It accepts `.bib`,
+CSL-YAML, or CSL-JSON, from a whole file or inline:
+
+| source                  | `.bib` / bibtex | CSL-YAML      | CSL-JSON      |
+|--------------------------|-----------------|---------------|---------------|
+| `file=` attribute        | ✓               | ✓             | ✓             |
+| fenced block in the div  | ✓ ` ```bibtex ` | ✓ ` ```yaml ` | ✓ ` ```json ` |
+| printed cell output      | ✓               | ✓             | ✓             |
+
+The common case is a whole file, formatted by the document CSL:
+
+```markdown
+::: {.entries style="bibliography" file="publications.bib"}
+:::
+```
+
+The programmatic path prints citation data from a cell — filter and sort in
+your own language, then emit CSL back out. The format is detected
+automatically (override with `format: bibtex|csljson|cslyaml` if needed), and
+the cell must *not* set `output: asis`:
+
+````markdown
+```{r}
+#| vitae:
+#|   style: bibliography
+refs <- yaml::read_yaml("publications.yaml")$references
+kept <- Filter(\(x) x$type == "article-journal", refs)
+cat(yaml::as.yaml(kept))
+```
+````
+
+No `csl:` is set by default, so entries render in whatever order citeproc's
+own default style gives them unless you set one yourself — see below.
+
+#### Choosing a CSL style for ordering
+
+Ordering is entirely the `<sort>` key inside a style's `<bibliography>`
+element — a CV just wants a different one than citeproc's alphabetical
+default. Reverse-chronological sorts on `issued` descending:
+
+```xml
+<bibliography>
+  <sort>
+    <key variable="issued" sort="descending"/>
+  </sort>
+  ...
+</bibliography>
+```
+
+Removing the `<sort>` element entirely makes citeproc fall back to input
+order — useful if you already filtered and sorted the entries upstream, in
+R/Python/Julia, and want the bibliography to display exactly that order. No
+off-the-shelf style does this in a form suited to a CV; see
+[`todo-csl.md`](todo-csl.md) for what was checked and what building one would
+take.
+
+Save the result as a `.csl` file and set `csl: mystyle.csl` in the front
+matter (or in `_quarto.yml` to apply it project-wide) — or adjust one online
+first in the [visual CSL editor](https://editor.citationstyles.org/visualEditor/).
+[`apa-cv`](https://www.zotero.org/styles/apa-cv) is a ready-made
+reverse-chronological example, usable straight from its URL:
+
+```yaml
+csl: https://www.zotero.org/styles/apa-cv
+```
+
+For template authors, bibliography entries route through the same template
+layer as everything else: supply `entries/bibliography.tex` / `.typ` / `.html`
+and each entry arrives with three fields — `entry` (the reference, rendered by
+citeproc and written for your target format), `id` (citation key) and `type`
+(CSL type, e.g. `article-journal`). No CSL knowledge enters your handler. A
+format that supplies nothing gets citeproc's own output passed through
+unchanged — the fallback for this style is passthrough, never the generic
+layout. One LaTeX caveat: under a numbered CSL style, `entry` contains
+`\CSLLeftMargin`/`\CSLRightInline`. Pandoc defines those macros only when its
+own csl divs remain in the document (the passthrough case), so a format routing
+bibliographies through its own handler should define them itself or prefer a
+non-numbered CSL.
+
 ## Using these filters in a template
 
 A CV template is an ordinary Quarto format extension that embeds `curriculum`
