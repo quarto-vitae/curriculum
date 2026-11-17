@@ -13,7 +13,7 @@ the R package of R Markdown templates [vitae](https://github.com/mitchelloharawi
 
 ## What this provides
 
-CV entry data, handled the same way across every vitae template. An author
+CV entry data and contact details, handled the same way across every vitae template. An author
 writes a listing as a table and names a style:
 
 ```markdown
@@ -161,6 +161,119 @@ layout. One LaTeX caveat: under a numbered CSL style, `entry` contains
 own csl divs remain in the document (the passthrough case), so a format routing
 bibliographies through its own handler should define them itself or prefer a
 non-numbered CSL.
+
+### Contact details
+
+The header of a CV (address, phone, email, profiles) is front matter rather than
+a listing. Every vitae template reads it from the same `social` key, so an author
+can switch templates without touching it:
+
+```yaml
+social:
+  - address: "Paris, France"
+  - email: marie.curie@example.org
+  - website: example.org
+  - github: mcurie
+  - mastodon: "@mcurie@fosstodon.org"
+  - stackoverflow: 123456/marie-curie
+  - linkedin: {handle: mcurie, label: "Marie Curie"}
+  - custom:
+      - icon: flask
+        text: "[Curie Laboratory](https://curie.fr)"
+      - icon: clock
+        text: "Available Mon–Thu"
+```
+
+Each item is `service: handle`, written the way that service writes it, so a
+Mastodon handle is `@user@instance`, not two separate keys. A full profile URL
+works in place of any handle. A map lets the author override any of `handle`,
+`url`, `label`, `icon` or `title` for that item. Entries under `custom` are
+anything else, given as an icon and markdown `text`, with an optional `url`.
+
+`social` is a list because pandoc sorts YAML map keys, so only a list
+keeps the order the author wrote. A plain map (`social: {github: mcurie}`) is
+accepted, and is shown in the order of the table below.
+
+| service | handle | default link | default icon |
+|---------|--------|--------------|--------------|
+| `address` | free text | none | `location-dot` |
+| `phone` | as written | `tel:` | `phone` |
+| `email` | address | `mailto:` | `envelope` |
+| `website` | URL, scheme optional | the URL | `globe` |
+| `whatsapp` | phone number | `wa.me/` | `whatsapp` |
+| `telegram` | username | `t.me/` | `telegram` |
+| `skype` | username | `skype:…?chat` | `skype` |
+| `orcid` | iD | `orcid.org/` | `orcid` |
+| `googlescholar` | profile id (labelled "Google Scholar") | `scholar.google.com/citations?user=` | `google-scholar` |
+| `researchgate` | profile name | `researchgate.net/profile/` | `researchgate` |
+| `github` | username | `github.com/` | `github` |
+| `gitlab` | username | `gitlab.com/` | `gitlab` |
+| `bitbucket` | username | `bitbucket.org/` | `bitbucket` |
+| `stackoverflow` | `id` or `id/name` | `stackoverflow.com/users/` | `stack-overflow` |
+| `kaggle` | username | `kaggle.com/` | `kaggle` |
+| `hackerrank` | username | `hackerrank.com/profile/` | `hackerrank` |
+| `linkedin` | vanity name | `linkedin.com/in/` | `linkedin` |
+| `mastodon` | `@user@instance` | `https://instance/@user` | `mastodon` |
+| `bluesky` | handle | `bsky.app/profile/` | `bluesky` |
+| `x` | username | `x.com/` | `x-twitter` |
+| `twitter` | username | `twitter.com/` | `twitter` |
+| `xing` | profile name | `xing.com/profile/` | `xing` |
+| `reddit` | username | `reddit.com/user/` | `reddit` |
+| `medium` | username | `medium.com/@` | `medium` |
+
+An unknown service name is a warning that suggests the nearest known name,
+rather than an entry that silently goes missing.
+
+#### What a template receives
+
+The filter replaces `social` with a list in which every item has the same
+shape, whatever the author wrote:
+
+| field | example | |
+|-------|---------|-|
+| `service` | `mastodon`, `custom` | |
+| `is.<service>` | `is.mastodon` | true for this item's service, for `$if$` |
+| `title` | `Mastodon` | the service's name, for alt text; absent on custom entries without one |
+| `icon` | `mastodon` | a [Font Awesome 6](https://fontawesome.com/search?ic=free) name |
+| `url` | `https://fosstodon.org/@mcurie` | absent when there is nothing to link (`address`, custom without `url`) |
+| `label` | `@mcurie@fosstodon.org` | the display text |
+| `handle` | `@mcurie@fosstodon.org` | the handle, recovered from a URL if one was given |
+| `given.<field>` | `given.icon` | true where the author set `url`, `label`, `icon` or `title` themselves |
+| parts | `user`, `instance` (mastodon); `id`, `slug` (stackoverflow); `id` (googlescholar) | only where the service has them |
+
+As with entry fields, values arrive rendered for the target format. `url` is
+escaped for a link target (`\href{}` in LaTeX, a string in Typst), and
+everything else for running text, so build links from `url`, never from
+`handle`. A custom `label` may already contain a link of its own.
+
+The whole contact line is then one loop:
+
+```tex
+$for(social)$
+$if(social.url)$\href{$social.url$}{\faIcon{$social.icon$}~$social.label$}$else$\faIcon{$social.icon$}~$social.label$$endif$$sep$ | 
+$endfor$
+```
+
+The icons, links and labels are defaults. A template overrides them with
+pandoc's own conditionals, which is also how it takes an item out of the
+contact line to place it elsewhere:
+
+```tex
+$for(social)$
+$if(social.is.address)$
+\address{$social.label$}
+$else$
+\cvsocial{$if(social.given.icon)$\faIcon{$social.icon$}$elseif(social.is.github)$\faSquareGithub$else$\faIcon{$social.icon$}$endif$~$social.label$}
+$endif$
+$endfor$
+```
+
+Check `given.<field>` before substituting a default of your own, as above, so
+that an icon or label the author chose still wins over the template's.
+
+Pandoc's `$sep$` cannot know an item was skipped, so a template that moves items
+out of the loop should insert its separators itself, as LaTeX's own list
+macros do.
 
 ## Using these filters in a template
 
